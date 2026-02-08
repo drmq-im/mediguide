@@ -27,13 +27,13 @@ export const useRecordManager = () => {
         // ----------------------------------------
 
         const { error: uploadError } = await supabase.storage
-          .from('medical-records') 
+          .from('workups') 
           .upload(filePath, actualFile);
 
         if (uploadError) return null;
 
         const { data: { publicUrl } } = supabase.storage
-          .from('medical-records')
+          .from('workups')
           .getPublicUrl(filePath);
 
         return {
