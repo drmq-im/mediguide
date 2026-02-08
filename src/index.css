@@ -1,0 +1,133 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --- 1. CUSTOM ANIMATIONS (Cho App Y tế mượt mà) --- */
+@layer utilities {
+  .animate-in {
+    animation-duration: 300ms;
+    animation-fill-mode: both;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .fade-in {
+    animation-name: fadeIn;
+  }
+
+  .zoom-in-95 {
+    animation-name: zoomIn95;
+  }
+  
+  .zoom-in {
+    animation-name: zoomIn;
+  }
+
+  .slide-in-from-top-2 {
+    animation-name: slideInFromTop;
+  }
+  
+  .slide-in-from-bottom-2 {
+    animation-name: slideInFromBottom;
+  }
+
+  .slide-in-from-bottom-5 {
+    animation-name: slideInFromBottom5;
+  }
+}
+
+/* Keyframes Definitions */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes zoomIn95 {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes zoomIn {
+  from { opacity: 0; transform: scale(0.5); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideInFromTop {
+  from { transform: translateY(-0.5rem); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideInFromBottom {
+  from { transform: translateY(0.5rem); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideInFromBottom5 {
+  from { transform: translateY(1.25rem); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* --- 2. SCROLLBAR STYLING (Giao diện đẹp hơn) --- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1; /* slate-300 */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8; /* slate-400 */
+}
+
+/* --- 3. PRINT STYLES (Cấu hình cho máy in) --- */
+/* Chỉ kích hoạt khi người dùng bấm Ctrl+P hoặc window.print() */
+@layer utilities {
+  @media print {
+    /* 1. Ẩn tất cả nội dung web mặc định (Header, Sidebar, Buttons...) */
+    body * {
+      visibility: hidden;
+    }
+
+    /* 2. Chỉ hiển thị vùng có ID 'print-template' và con của nó */
+    #print-template, #print-template * {
+      visibility: visible;
+    }
+
+    /* 3. Căn chỉnh vùng in vào góc trái trên cùng của trang giấy */
+    #print-template {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      display: block !important; /* Quan trọng: Ghi đè class 'hidden' */
+      background: white;
+      color: black;
+      font-size: 12pt; /* Cỡ chữ chuẩn văn bản */
+    }
+
+    /* 4. Tắt các hiệu ứng bóng đổ, màu nền để tiết kiệm mực in */
+    * {
+      box-shadow: none !important;
+      text-shadow: none !important;
+    }
+    
+    /* 5. Cấu hình khổ giấy A4 */
+    @page {
+      size: A4;
+      margin: 15mm 20mm; /* Lề trên/dưới 15mm, trái/phải 20mm */
+    }
+
+    /* 6. Đảm bảo bảng biểu không bị ngắt trang xấu */
+    table, tr, td, th {
+      page-break-inside: avoid;
+    }
+  }
+}
