@@ -6,41 +6,46 @@ export const useRecordManager = () => {
   const [loading, setLoading] = useState(false);
   const { t } = useLanguage();
 
+  // --- 1. UPLOAD FILE (Sửa lại Path để khớp với RLS) ---
   const uploadFiles = async (filesMap) => {
     const uploadedUrls = {};
     
+    // Lấy User ID hiện tại
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Chưa đăng nhập");
+
     for (const [category, files] of Object.entries(filesMap || {})) {
       if (!files || files.length === 0) continue;
       
       const processedFiles = await Promise.all(files.map(async (fileItem) => {
+        // Nếu file đã có URL (file cũ), giữ nguyên
         if (fileItem.url && !fileItem.file) return fileItem;
         
         const actualFile = fileItem.file || fileItem; 
         if (!actualFile || !(actualFile instanceof File)) return fileItem;
 
-        // --- PHẦN QUAN TRỌNG: TẠO ID THỦ CÔNG ---
         const fileExt = actualFile.name.split('.').pop();
-        // Dùng Date.now() để thay thế uuid, đảm bảo không lỗi "n is not a function"
         const uniqueId = `${Date.now()}_${Math.floor(Math.random() * 100000)}`;
         const fileName = `${uniqueId}.${fileExt}`;
-        const filePath = `${category}/${fileName}`;
-        // ----------------------------------------
+        
+        // QUAN TRỌNG: Thêm user.id vào đường dẫn để khớp với Policy SQL
+        const filePath = `${user.id}/${category}/${fileName}`;
 
+        // Upload vào bucket 'medical-records'
         const { error: uploadError } = await supabase.storage
-          .from('workups') 
+          .from('medical-records') 
           .upload(filePath, actualFile);
 
-        if (uploadError) return null;
+        if (uploadError) {
+            console.error("Upload lỗi:", uploadError);
+            return null;
+        }
 
-        const { data: { publicUrl } } = supabase.storage
-          .from('workups')
-          .getPublicUrl(filePath);
-
+        // Với Private Bucket, ta lưu path để sau này dùng createSignedUrl
         return {
           name: actualFile.name,
-          type: actualFile.type,
-          size: actualFile.size,
-          url: publicUrl
+          path: filePath, // Lưu path thay vì publicUrl
+          type: actualFile.type
         };
       }));
 
@@ -49,41 +54,47 @@ export const useRecordManager = () => {
     return uploadedUrls;
   };
 
-  const saveRecord = async (formData, recordId = null) => {
+  // --- 2. LƯU BỆNH ÁN (Dùng RPC để mã hóa) ---
+  const saveRecord = async (data, recordId = null) => {
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Vui lòng đăng nhập lại.");
-
-      // Upload file trước khi lưu
-      const processedFiles = await uploadFiles(formData.files);
+      // 1. Upload file trước
+      const uploadedFilesMap = await uploadFiles(data.files);
       
-      const finalFormData = { ...formData, files: processedFiles };
-
-      const payload = {
-        user_id: user.id,
-        patient_name: formData.demo?.name || 'Không tên',
-        status: formData.plan?.status === 'admitted' ? 'final' : 'draft',
-        updated_at: new Date().toISOString(),
-        form_data: finalFormData
+      // 2. Chuẩn bị dữ liệu JSON
+      const recordData = {
+        ...data,
+        files: uploadedFilesMap // Cập nhật lại thông tin file đã upload
       };
 
-      let result;
       if (recordId && recordId !== 'new') {
-        const { data, error } = await supabase
-          .from('records') // Đảm bảo tên bảng là 'records'
-          .update(payload).eq('id', recordId).select().single();
+        // --- LOGIC UPDATE (Tạm thời chưa dùng RPC Update mã hóa - demo dùng update thường) ---
+        // Lưu ý: Nếu muốn bảo mật tuyệt đối, bạn cần viết thêm hàm RPC update_medical_record tương tự create
+        const { error } = await supabase
+            .from('records')
+            .update({ 
+                patient_name: data.demo.name,
+                updated_at: new Date(),
+                status: data.plan?.status === 'admitted' ? 'final' : 'draft',
+                // Lưu ý: Update trực tiếp sẽ không mã hóa nếu không dùng RPC. 
+                // Ở bước này tạm thời ta update vào cột form_data cũ để code chạy được.
+                form_data: recordData 
+            })
+            .eq('id', recordId);
+            
         if (error) throw error;
-        result = data;
-      } else {
-        const { data, error } = await supabase
-          .from('records')
-          .insert([payload]).select().single();
-        if (error) throw error;
-        result = data;
-      }
+        return { success: true, id: recordId };
 
-      return { success: true, id: result.id, message: "Lưu thành công!" };
+      } else {
+        // --- LOGIC CREATE (Dùng RPC mã hóa) ---
+        const { data: newId, error } = await supabase.rpc('create_medical_record', {
+            p_patient_name: data.demo.name,
+            p_content: recordData // Gửi JSON để mã hóa
+        });
+
+        if (error) throw error;
+        return { success: true, id: newId };
+      }
     } catch (error) {
       console.error("Lỗi lưu:", error);
       return { success: false, message: error.message };
@@ -92,32 +103,80 @@ export const useRecordManager = () => {
     }
   };
 
-  // Các hàm fetch giữ nguyên
-  const fetchRecords = useCallback(async (searchTerm = '') => {
-    setLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      let query = supabase.from('records').select('id, patient_name, updated_at, status').eq('user_id', user.id).order('updated_at', { ascending: false });
-      if (searchTerm) query = query.ilike('patient_name', `%${searchTerm}%`);
-      const { data, error } = await query;
-      if (error) throw error;
-      return { success: true, data: data || [] };
-    } catch (error) { return { success: false, data: [] }; } finally { setLoading(false); }
-  }, []);
-
+  // --- 3. TẢI BỆNH ÁN (Dùng RPC để giải mã) ---
   const fetchRecord = useCallback(async (id) => {
     if (!id || id === 'new') return null;
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('records').select('*').eq('id', id).single();
+      // Gọi RPC giải mã
+      const { data, error } = await supabase.rpc('get_medical_record', { p_record_id: id });
+
       if (error) throw error;
-      return { ...data.form_data, id: data.id, created_at: data.created_at };
-    } catch (error) { return null; } finally { setLoading(false); }
+      const record = data?.[0]; // RPC trả về mảng
+
+      if (!record) return null;
+
+      // Trả về dữ liệu đã giải mã
+      return { 
+        ...record.content, // Spread JSON content ra form
+        id: record.id, 
+        created_at: record.updated_at,
+        status: record.status
+      };
+    } catch (error) {
+      console.error("Lỗi tải:", error);
+      return null; 
+    } finally { 
+      setLoading(false); 
+    }
+  }, []);
+
+  // --- 4. DANH SÁCH BỆNH ÁN (Dashboard) ---
+  const fetchRecords = useCallback(async (searchTerm = '') => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      let query = supabase
+        .from('records')
+        .select('id, patient_name, updated_at, status') // Chỉ lấy metadata, không lấy content mã hóa
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false });
+
+      if (searchTerm) {
+        query = query.ilike('patient_name', `%${searchTerm}%`);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return { success: true, data: data || [] };
+    } catch (error) {
+      return { success: false, data: [] };
+    } finally {
+      setLoading(false);
+    }
   }, []);
   
   const createRecord = (data) => saveRecord(data, null);
-  const updateRecord = (id, data) => saveRecord(data, id);
-  const deleteRecord = async (id) => { const { error } = await supabase.from('records').delete().eq('id', id); return { success: !error }; }
+  const updateRecord = (id, data) => saveRecord(id, data);
+  
+  const deleteRecord = async (id) => {
+    try {
+        const { error } = await supabase.from('records').delete().eq('id', id);
+        if (error) throw error;
+        return { success: true };
+    } catch(err) {
+        return { success: false, message: err.message };
+    }
+  };
 
-  return { loading, fetchRecords, fetchRecord, createRecord, updateRecord, saveRecord, deleteRecord };
+  return { 
+    loading, 
+    fetchRecords, 
+    fetchRecord, 
+    createRecord, 
+    updateRecord, // Sửa lại tên biến export cho khớp
+    saveRecord,
+    deleteRecord 
+  };
 };

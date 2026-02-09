@@ -3,9 +3,9 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutGrid, FilePlus, User, LogOut, Activity, Menu, ChevronRight 
 } from 'lucide-react';
-import { useLanguage } from '../contexts/LanguageContext';
-import { cn } from '../lib/utils';
-import LanguageSwitcher from '../components/ui/LanguageSwitcher';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { cn } from '../../lib/utils';
+import LanguageSwitcher from '../ui/LanguageSwitcher';
 
 const MainLayout = ({ children, session, onLogout }) => {
   const navigate = useNavigate();

@@ -46,32 +46,31 @@ const RecordEditor = ({ session }) => {
 
   const { reset, handleSubmit, watch, setValue } = methods;
 
-  // --- 1. LOAD HỒ SƠ (FIX LỖI UI TẠI ĐÂY) ---
+  // --- 1. Effect: Tải dữ liệu hoặc Reset form ---
   useEffect(() => {
-    const loadRecord = async () => {
-      // Chỉ fetch nếu có ID và không phải trang tạo mới
+    const loadData = async () => {
       if (id && id !== 'new') {
+        // Chế độ Edit: Tải dữ liệu
         const data = await fetchRecord(id);
-        
         if (data) {
-          // Trường hợp 1: Tìm thấy hồ sơ -> Đổ dữ liệu vào form
-          reset(data);
+          methods.reset(data); // Đổ dữ liệu vào form
         } else {
-          // Trường hợp 2: Lỗi hoặc Không tìm thấy (data là null)
-          setToast({ 
-            message: "Không tìm thấy hồ sơ hoặc bạn không có quyền truy cập!", 
-            type: "error" 
-          });
-          
-          // Tự động quay về trang chủ sau 2 giây để tránh lỗi UI
-          setTimeout(() => {
-            navigate('/');
-          }, 2000);
+          setToast({ message: "Không tìm thấy bệnh án", type: "error" });
+          navigate('/');
         }
+      } else {
+        // Chế độ New: Reset form về trắng
+        methods.reset({
+            demo: { gender: 'male', name: '', age: '' },
+            history: { allergy: { hasAllergy: false } },
+            exam: { vitals: {} },
+            diagnosis: { files: {} },
+            plan: { status: 'outpatient', treatmentMeds: [] }
+        });
       }
     };
-    loadRecord();
-  }, [id, fetchRecord, reset, navigate]);
+    loadData();
+  }, [id, fetchRecord, methods, navigate]);
 
   // --- 2. LOAD THƯ VIỆN KIẾN THỨC ---
   useEffect(() => {
