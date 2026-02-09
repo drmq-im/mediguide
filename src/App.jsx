@@ -5,7 +5,7 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import { Loader2 } from 'lucide-react';
 
 // Import Layout Mới
-import MainLayout from './MainLayoutcomponents/layouts/MainLayout';
+import MainLayout from './components/layouts/MainLayout';
 
 // Import Pages
 import AuthPage from './pages/AuthPage';
